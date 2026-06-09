@@ -2,9 +2,6 @@ use std::io::Cursor;
 
 use spex::parsing::XmlReader;
 
-#[cfg(feature = "wasm")]
-use wasm_bindgen::prelude::*;
-
 mod libresplit;
 mod livesplit;
 
@@ -14,6 +11,12 @@ fn convert_inner(file: String) -> Result<String, String> {
     let livesplit_data = livesplit::LiveSplitFile::new(xml);
     Ok(libresplit::LibreSplitFile::from_livesplit(livesplit_data).get())
 }
+
+// Build the library for WASM targets.
+// Used on the LibreSplit website, for converting splits.
+
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub fn convert(file: String) -> String {

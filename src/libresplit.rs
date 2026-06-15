@@ -25,7 +25,7 @@ impl LibreSplitFile {
                 title: lss_split.name,
                 time: lss_split.split_time,
                 best_time: "0.000000".to_string(),
-                best_segment: "0.000000".to_string(),
+                best_segment: lss_split.best_segment,
             };
             splits.push(split);
         }

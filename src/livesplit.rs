@@ -69,7 +69,23 @@ impl LiveSplitFile {
                         }
                         None => "0.000000".to_string(),
                     };
-                    let segment = Segment { name, split_time };
+
+                    // Get best segment .
+                    let elm_best_segments = elm_segment.opt("BestSegmentTime").element();
+                    let best_segment = match elm_best_segments {
+                        Some(elm_best_segment) => {
+                            let elm_real_time = elm_best_segment.opt("RealTime").element();
+                            match elm_real_time {
+                                Some(real_time) => {
+                                    real_time.text().unwrap_or("0.000000").to_string()
+                                }
+                                None => "0.000000".to_string(), // default if element is missing.
+                            }
+                        }
+                        None => "0.000000".to_string(),
+                    };
+
+                    let segment = Segment { name, split_time, best_segment };
                     segments.push(segment);
                 }
             }
@@ -77,6 +93,7 @@ impl LiveSplitFile {
                 let placeholder = Segment {
                     name: "No Splits Provided".to_string(),
                     split_time: "0.000000".to_string(),
+                    best_segment: "0.000000".to_string(),
                 };
                 segments.push(placeholder);
             }
@@ -95,4 +112,5 @@ impl LiveSplitFile {
 pub struct Segment {
     pub name: String,
     pub split_time: String,
+    pub best_segment: String,
 }

@@ -1,6 +1,6 @@
 # converter
 
-A WASM library for converting [LiveSplit](https://livesplit.org) `.lss` files into the [LibreSplit](https://libresplit.org) `.json` format.
+A library for converting [LiveSplit](https://livesplit.org) `.lss` files into the [LibreSplit](https://libresplit.org) `.json` format.
 
 An online converter using this library is available at [libresplit.org/converter](https://libresplit.org/converter).
 
@@ -26,6 +26,13 @@ wasm-pack build --scope libresplit --target web --release
 ```
 
 This outputs a compiled WASM package under `pkg/`.
+
+### Building (for C ABI)
+```sh
+git clone https://github.com/LibreSplit/converter
+cd converter
+cargo build --release
+```
 
 ---
 

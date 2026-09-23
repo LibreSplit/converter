@@ -141,7 +141,12 @@ impl LiveSplitFile {
 						game_time: best_segment_game,
 					};
 
-                    let segment = Segment { name, icon, split_time, best_segment };
+					let best_time = Time {
+						real_time: "".to_string(),
+						game_time: "".to_string(),
+					};
+
+                    let segment = Segment { name, icon, split_time, best_time, best_segment };
                     segments.push(segment);
                 }
             }
@@ -150,6 +155,10 @@ impl LiveSplitFile {
                     name: "No Splits Provided".to_string(),
 					icon: "".to_string(),
                     split_time: Time {
+						real_time: "-".to_string(),
+						game_time: "-".to_string(),
+					},
+                    best_time: Time {
 						real_time: "-".to_string(),
 						game_time: "-".to_string(),
 					},
@@ -193,5 +202,6 @@ pub struct Segment {
     pub name: String,
 	pub icon: String,
     pub split_time: Time,
+	pub best_time: Time,
     pub best_segment: Time,
 }

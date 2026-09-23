@@ -28,12 +28,9 @@ impl LibreSplitFile {
         for lss_split in lss.segments {
             let split = Split {
                 title: lss_split.name,
-				icon: lss_split.icon,
+				icon: Self::convert_icon(lss_split.icon.as_str()).unwrap_or("".to_string()),
                 time: lss_split.split_time,
-                best_time: Time {
-					real_time: "-".to_string(),
-					game_time: "-".to_string(),
-				},
+                best_time: lss_split.best_time,
                 best_segment: lss_split.best_segment,
             };
             splits.push(split);

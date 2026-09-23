@@ -19,7 +19,7 @@ impl LibreSplitFile {
     pub fn from_livesplit(lss: LiveSplitFile) -> Self {
         let name = lss.game_name;
 		let category = lss.category_name;
-		let icon = lss.game_icon;
+		let icon = Self::convert_icon(&lss.game_icon).unwrap_or("".to_string());
         let attempt_count = lss.attempt_count;
 		let finished_count = lss.finished_count;
 
@@ -58,7 +58,108 @@ impl LibreSplitFile {
     }
 
 	pub fn convert_icon(source: &str) -> Result<String, String> {
-		//todo: implement
+		if source.is_empty() {
+			return Ok(String::new());
+		}
+
+		if source.contains('\0') {
+			return Err("Icon source contains a NULL byte".to_owned());
+		}
+
+		use base64::{Engine as _, engine::general_purpose::STANDARD};
+		use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
+		use typed_path::{Utf8WindowsPath, Utf8WindowsPrefix};
+
+		let wrapped = source.trim().starts_with("<![CDATA[");
+		let icon = if wrapped {
+			source.trim().strip_prefix("<![CDATA[").and_then(|text| text.strip_suffix("]]>")).ok_or("Unterminated icon CDATA")?.trim()
+		} else {
+			source
+		};
+
+		let windows_path = Utf8WindowsPath::new(source);
+		let windows_components = windows_path.components();
+		let windows_prefix = if source.starts_with('/') {
+			None
+		} else {
+			windows_components.prefix_kind()
+		};
+
+		if !wrapped && windows_prefix.is_none() {
+			if let Some((scheme, _)) = source.split_once(':') {
+				if scheme.starts_with(|c: char| c.is_ascii_alphabetic()) && scheme.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'+' | b'-' | b'.')) {
+					return Ok(source.to_owned());
+				}
+			}
+		}
+
+		let encoded: Vec<u8> = icon.bytes().filter(|c| !c.is_ascii_whitespace()).collect();
+		if wrapped || encoded.starts_with(b"AAEAAAD/////") {
+			if encoded.is_empty() {
+				return Ok(String::new());
+			}
+
+			let decoded = STANDARD.decode(&encoded).map_err(|error| format!("Invalid base64 in embedded icon: {error}"))?;
+			const STREAM_HEADER: &[u8] = b"\x00\x01\x00\x00\x00\xff\xff\xff\xff\x01\x00\x00\x00\x00\x00\x00\x00";
+			if !decoded.starts_with(STREAM_HEADER) {
+				return Err("Invalid .NET stream header in embedded icon".to_owned());
+			}
+
+			let image = decoded.windows(10).enumerate().find_map(|(offset, record)| {
+				if record[0] != 15 || record[9] != 2 {
+					return None;
+				}
+
+				let length = i32::from_le_bytes(record[5..9].try_into().ok()?);
+				let start = offset + 10;
+				let end = start.checked_add(usize::try_from(length).ok()?)?;
+				let bitmap_type = b"System.Drawing.Bitmap";
+				if decoded.get(end..) != Some(&[11][..]) || !decoded[..offset].windows(bitmap_type.len()).any(|text| text == bitmap_type) {
+					return None;
+				}
+
+				decoded.get(start..end)
+			})
+			.ok_or("Invalid .NET bitmap byte array in embedded icon")?;
+
+			let format = infer::get(image).filter(|format| format.matcher_type() == infer::MatcherType::Image).ok_or("Unsupported image format in embedded icon")?;
+			let mime = format.mime_type();
+
+			let mut uri = format!("data:{mime};base64,");
+			STANDARD.encode_string(image, &mut uri);
+			return Ok(uri);
+		}
+
+		let (scheme, path) = if let Some(prefix) = windows_prefix {
+			if !windows_path.is_absolute() {
+				return Ok(source.to_owned());
+			}
+
+			let unix_path = windows_path.with_unix_encoding();
+			match prefix {
+				Utf8WindowsPrefix::Disk(drive) | Utf8WindowsPrefix::VerbatimDisk(drive) => {
+					("file://", format!("/{drive}:{unix_path}"))
+				}
+				Utf8WindowsPrefix::UNC(server, share) | Utf8WindowsPrefix::VerbatimUNC(server, share) => {
+					("file://", format!("{server}/{share}{unix_path}"))
+				}
+				_ => return Err("Unsupported Windows icon path prefix".to_owned()),
+			}
+		} else if source.starts_with('/') {
+			("file://", source.to_owned())
+		} else {
+			return Ok(source.to_owned());
+		};
+
+		const PATH_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
+			.remove(b'-')
+			.remove(b'.')
+			.remove(b'_')
+			.remove(b'~')
+			.remove(b'/')
+			.remove(b':');
+
+		Ok(format!("{scheme}{}", utf8_percent_encode(&path, PATH_ENCODE_SET)))
 	}
 }
 
@@ -69,3 +170,7 @@ pub struct Split {
     pub best_time: String,
     pub best_segment: String,
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/icon.rs"]
+mod tests;

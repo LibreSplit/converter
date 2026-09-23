@@ -3,8 +3,10 @@ use spex::xml::XmlDocument;
 pub struct LiveSplitFile {
     pub game_name: String,
     pub category_name: String,
-    pub platform: String,
+	pub game_icon: String,
+    pub _platform: String, // unused
     pub attempt_count: u32,
+	pub finished_count: u32,
     pub segments: Vec<Segment>,
 }
 
@@ -26,6 +28,14 @@ impl LiveSplitFile {
         }
         .to_string();
 
+		// Read game icon.
+		let elm_game_icon = file.root().opt("GameIcon").element();
+		let game_icon = match elm_game_icon {
+			Some(icon) => icon.text().expect("Unknown Game Icon"),
+			None => "Unknown Game Icon",
+		}
+		.to_string();
+
         // Read platform.
         let elm_platform = file.root().opt("Platform").element();
         let platform = match elm_platform {
@@ -41,6 +51,7 @@ impl LiveSplitFile {
             None => "0",
         };
         let attempt_count: u32 = attempt_count_str.trim().parse().unwrap_or(0);
+		let finished_count: u32 = Self::get_finished_count(&file);
 
         // Read splits.
         let mut segments: Vec<Segment> = Vec::new();
@@ -102,11 +113,28 @@ impl LiveSplitFile {
         LiveSplitFile {
             game_name,
             category_name,
-            platform,
+			game_icon,
+            _platform: platform,
             attempt_count,
+			finished_count,
             segments,
         }
     }
+
+	fn get_finished_count(file: &XmlDocument) -> u32 {
+		let Some(attempts) = file.root().opt("AttemptHistory").element() else {
+			return 0;
+		};
+
+		let mut finished_attempts = 0;
+		for attempt in attempts.elements().filter(|e| e.is_named("Attempt")) {
+			if attempt.elements().any(|child| child.is_named("RealTime") || child.is_named("GameTime")) {
+				finished_attempts += 1;
+			}
+		}
+
+		return finished_attempts;
+	}
 }
 
 pub struct Segment {

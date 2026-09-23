@@ -5,8 +5,11 @@ use crate::livesplit::LiveSplitFile;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LibreSplitFile {
-    pub title: String,
+    pub name: String,
+	pub category: String,
+	pub icon: String,
     pub attempt_count: u32,
+	pub finished_count: u32,
     pub splits: Vec<Split>,
     pub width: u32,
     pub height: u32,
@@ -14,9 +17,11 @@ pub struct LibreSplitFile {
 
 impl LibreSplitFile {
     pub fn from_livesplit(lss: LiveSplitFile) -> Self {
-        // Get title.
-        let title = lss.game_name + " " + &lss.category_name;
+        let name = lss.game_name;
+		let category = lss.category_name;
+		let icon = lss.game_icon;
         let attempt_count = lss.attempt_count;
+		let finished_count = lss.finished_count;
 
         // Constructs splits vector.
         let mut splits: Vec<Split> = Vec::new();
@@ -36,8 +41,11 @@ impl LibreSplitFile {
         let height = 80;
 
         LibreSplitFile {
-            title,
+            name,
+			category,
+			icon,
             attempt_count,
+			finished_count,
             splits,
             width,
             height,
@@ -48,6 +56,10 @@ impl LibreSplitFile {
         let rtn = to_string_pretty(&self).unwrap_or("".to_string());
         format!("{}", rtn)
     }
+
+	pub fn convert_icon(source: &str) -> Result<String, String> {
+		//todo: implement
+	}
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -1,5 +1,7 @@
 use spex::xml::XmlDocument;
 
+use crate::libresplit::Time;
+
 pub struct LiveSplitFile {
     pub game_name: String,
     pub category_name: String,
@@ -66,45 +68,95 @@ impl LiveSplitFile {
                         None => "Unknown Split".to_string(),
                     };
 
+					// Get icon.
+					let elm_icon = elm_segment.opt("Icon").element();
+					let icon = match elm_icon {
+						Some(icon) => icon.text().unwrap_or("").to_string(),
+						None => "".to_string(),
+					};
+
                     // Get split time.
                     let elm_split_times = elm_segment.opt("SplitTimes").opt("SplitTime").element();
-                    let split_time = match elm_split_times {
+                    let split_real_time = match elm_split_times {
                         Some(elm_split_time) => {
                             let elm_real_time = elm_split_time.opt("RealTime").element();
                             match elm_real_time {
                                 Some(real_time) => {
-                                    real_time.text().unwrap_or("0.000000").to_string()
+                                    real_time.text().unwrap_or("-").to_string()
                                 }
-                                None => "0.000000".to_string(), // default if element is missing.
+                                None => "-".to_string(), // default if element is missing.
                             }
                         }
-                        None => "0.000000".to_string(),
+                        None => "-".to_string(),
                     };
+
+					let split_game_time = match elm_split_times {
+                        Some(elm_split_time) => {
+                            let elm_real_time = elm_split_time.opt("GameTime").element();
+                            match elm_real_time {
+                                Some(real_time) => {
+                                    real_time.text().unwrap_or("-").to_string()
+                                }
+                                None => "-".to_string(), // default if element is missing.
+                            }
+                        }
+                        None => "-".to_string(),
+                    };
+
+					let split_time = Time {
+						real_time: split_real_time,
+						game_time: split_game_time,
+					};
 
                     // Get best segment .
                     let elm_best_segments = elm_segment.opt("BestSegmentTime").element();
-                    let best_segment = match elm_best_segments {
+                    let best_segment_real = match elm_best_segments {
                         Some(elm_best_segment) => {
                             let elm_real_time = elm_best_segment.opt("RealTime").element();
                             match elm_real_time {
                                 Some(real_time) => {
-                                    real_time.text().unwrap_or("0.000000").to_string()
+                                    real_time.text().unwrap_or("-").to_string()
                                 }
-                                None => "0.000000".to_string(), // default if element is missing.
+                                None => "-".to_string(), // default if element is missing.
                             }
                         }
-                        None => "0.000000".to_string(),
+                        None => "-".to_string(),
                     };
 
-                    let segment = Segment { name, split_time, best_segment };
+					let best_segment_game = match elm_best_segments {
+                        Some(elm_best_segment) => {
+                            let elm_real_time = elm_best_segment.opt("GameTime").element();
+                            match elm_real_time {
+                                Some(real_time) => {
+                                    real_time.text().unwrap_or("-").to_string()
+                                }
+                                None => "-".to_string(), // default if element is missing.
+                            }
+                        }
+                        None => "-".to_string(),
+                    };
+
+					let best_segment = Time {
+						real_time: best_segment_real,
+						game_time: best_segment_game,
+					};
+
+                    let segment = Segment { name, icon, split_time, best_segment };
                     segments.push(segment);
                 }
             }
             None => {
                 let placeholder = Segment {
                     name: "No Splits Provided".to_string(),
-                    split_time: "0.000000".to_string(),
-                    best_segment: "0.000000".to_string(),
+					icon: "".to_string(),
+                    split_time: Time {
+						real_time: "-".to_string(),
+						game_time: "-".to_string(),
+					},
+                    best_segment: Time {
+						real_time: "-".to_string(),
+						game_time: "-".to_string(),
+					},
                 };
                 segments.push(placeholder);
             }
@@ -139,6 +191,7 @@ impl LiveSplitFile {
 
 pub struct Segment {
     pub name: String,
-    pub split_time: String,
-    pub best_segment: String,
+	pub icon: String,
+    pub split_time: Time,
+    pub best_segment: Time,
 }

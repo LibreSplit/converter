@@ -28,8 +28,12 @@ impl LibreSplitFile {
         for lss_split in lss.segments {
             let split = Split {
                 title: lss_split.name,
+				icon: lss_split.icon,
                 time: lss_split.split_time,
-                best_time: "0.000000".to_string(),
+                best_time: Time {
+					real_time: "-".to_string(),
+					game_time: "-".to_string(),
+				},
                 best_segment: lss_split.best_segment,
             };
             splits.push(split);
@@ -166,9 +170,16 @@ impl LibreSplitFile {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Split {
     pub title: String,
-    pub time: String,
-    pub best_time: String,
-    pub best_segment: String,
+	pub icon: String,
+    pub time: Time,
+    pub best_time: Time,
+    pub best_segment: Time,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Time {
+	pub real_time: String,
+	pub game_time: String,
 }
 
 #[cfg(test)]

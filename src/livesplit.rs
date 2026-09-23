@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use spex::xml::XmlDocument;
 
 use crate::libresplit::Time;
@@ -57,10 +59,11 @@ impl LiveSplitFile {
 
         // Read splits.
         let mut segments: Vec<Segment> = Vec::new();
+		let mut attempt_times: HashMap<i32, [Option<i128>; 2]> = HashMap::new();
         let elm_segments = file.root().opt("Segments").element();
         match elm_segments {
             Some(segments_iter) => {
-                for elm_segment in segments_iter.elements().filter(|e| e.is_named("Segment")) {
+                for (segment_idx, elm_segment) in segments_iter.elements().filter(|e| e.is_named("Segment")).enumerate() {
                     // Get split name.
                     let elm_name = elm_segment.opt("Name").element();
                     let name = match elm_name {
@@ -76,13 +79,17 @@ impl LiveSplitFile {
 					};
 
                     // Get split time.
-                    let elm_split_times = elm_segment.opt("SplitTimes").opt("SplitTime").element();
+                    let elm_split_times = elm_segment.opt("SplitTimes").element().and_then(|times| {
+						times.elements().find(|time| {
+							time.is_named("SplitTime") && time.att_opt("name") == Some("Personal Best")
+						})
+					});
                     let split_real_time = match elm_split_times {
                         Some(elm_split_time) => {
                             let elm_real_time = elm_split_time.opt("RealTime").element();
                             match elm_real_time {
                                 Some(real_time) => {
-                                    real_time.text().unwrap_or("-").to_string()
+                                    Self::convert_time(real_time.text().unwrap_or("-"))
                                 }
                                 None => "-".to_string(), // default if element is missing.
                             }
@@ -92,10 +99,10 @@ impl LiveSplitFile {
 
 					let split_game_time = match elm_split_times {
                         Some(elm_split_time) => {
-                            let elm_real_time = elm_split_time.opt("GameTime").element();
-                            match elm_real_time {
-                                Some(real_time) => {
-                                    real_time.text().unwrap_or("-").to_string()
+                            let elm_game_time = elm_split_time.opt("GameTime").element();
+                            match elm_game_time {
+                                Some(game_time) => {
+                                    Self::convert_time(game_time.text().unwrap_or("-"))
                                 }
                                 None => "-".to_string(), // default if element is missing.
                             }
@@ -115,7 +122,7 @@ impl LiveSplitFile {
                             let elm_real_time = elm_best_segment.opt("RealTime").element();
                             match elm_real_time {
                                 Some(real_time) => {
-                                    real_time.text().unwrap_or("-").to_string()
+									Self::convert_time(real_time.text().unwrap_or("-"))
                                 }
                                 None => "-".to_string(), // default if element is missing.
                             }
@@ -125,10 +132,10 @@ impl LiveSplitFile {
 
 					let best_segment_game = match elm_best_segments {
                         Some(elm_best_segment) => {
-                            let elm_real_time = elm_best_segment.opt("GameTime").element();
-                            match elm_real_time {
-                                Some(real_time) => {
-                                    real_time.text().unwrap_or("-").to_string()
+                            let elm_game_time = elm_best_segment.opt("GameTime").element();
+                            match elm_game_time {
+                                Some(game_time) => {
+                                    Self::convert_time(game_time.text().unwrap_or("-"))
                                 }
                                 None => "-".to_string(), // default if element is missing.
                             }
@@ -141,9 +148,44 @@ impl LiveSplitFile {
 						game_time: best_segment_game,
 					};
 
+					let mut best = [None; 2];
+					let mut next_attempt_times = HashMap::new();
+					if let Some(history) = elm_segment.opt("SegmentHistory").element() {
+						for record in history.elements().filter(|e| e.is_named("Time")) {
+							let Some(id) = record.att_opt("id").and_then(|id| id.trim().parse::<i32>().ok()).filter(|id| *id > 0)
+							else {
+								continue;
+							};
+
+							let mut total = if segment_idx == 0 {
+								[Some(0); 2]
+							} else {
+								attempt_times.remove(&id).unwrap_or([None; 2])
+							};
+
+							for (method_idx, method) in ["RealTime", "GameTime"].iter().enumerate() {
+								let Some(time) = record.opt(*method).element() else {
+									continue;
+								};
+
+								let text = time.text().unwrap_or("-").trim();
+								if text.is_empty() {
+									continue;
+								}
+
+								total[method_idx] = total[method_idx].and_then(|elapsed| elapsed.checked_add(Self::parse_time(text)?))
+									.filter(|time| time.unsigned_abs() / 1000 < i64::MAX as u128);
+								best[method_idx] = best[method_idx].into_iter().chain(total[method_idx]).min();
+							}
+
+							next_attempt_times.insert(id, total);
+						}
+					}
+
+					attempt_times = next_attempt_times;
 					let best_time = Time {
-						real_time: "".to_string(),
-						game_time: "".to_string(),
+						real_time: best[0].map(Self::format_time).unwrap_or_else(|| "-".to_owned()),
+						game_time: best[1].map(Self::format_time).unwrap_or_else(|| "-".to_owned()),
 					};
 
                     let segment = Segment { name, icon, split_time, best_time, best_segment };
@@ -182,6 +224,79 @@ impl LiveSplitFile {
         }
     }
 
+	fn convert_time(text: &str) -> String {
+		Self::parse_time(text).map(Self::format_time).unwrap_or_else(|| "-".to_owned())
+	}
+
+	fn parse_time(text: &str) -> Option<i128> {
+		fn number(text: &str) -> Option<i128> {
+			if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
+				return None;
+			}
+
+			text.parse().ok()
+		}
+
+		let text = text.trim();
+		let negative = text.starts_with('-');
+		let mut parts = text.strip_prefix('-').unwrap_or(text).split(':');
+		let hours = parts.next()?;
+		let minutes = number(parts.next()?)?;
+		let seconds = parts.next()?;
+		if parts.next().is_some() || minutes >= 60 {
+			return None;
+		}
+
+		let (days, hours) = match hours.split_once('.') {
+			Some((days, hours)) => {
+				let hours = number(hours)?;
+				if hours >= 24 {
+					return None;
+				}
+				(number(days)?, hours)
+			}
+			None => (0, number(hours)?),
+		};
+
+		let (seconds, nanos) = match seconds.split_once('.') {
+			Some((seconds, fraction)) => {
+				if fraction.len() > 9 {
+					return None;
+				}
+				let nanos = number(fraction)?.checked_mul(10_i128.pow(9 - fraction.len() as u32))?;
+				(number(seconds)?, nanos)
+			}
+			None => (number(seconds)?, 0)
+		};
+
+		if seconds >= 60 {
+			return None;
+		}
+
+		let total = days.checked_mul(24)?
+			.checked_add(hours)?
+			.checked_mul(60)?
+			.checked_add(minutes)?
+			.checked_mul(60)?
+			.checked_add(seconds)?
+			.checked_mul(1000000000)?
+			.checked_add(nanos)?;
+
+		if total / 1000 >= i128::from(i64::MAX) {
+			return None;
+		}
+
+		Some(if negative { -total } else { total })
+	}
+
+	fn format_time(nanos: i128) -> String {
+		let micros = nanos / 1000;
+		let sign = if micros < 0 { "-" } else { "" };
+		let micros = micros.unsigned_abs();
+		let seconds = micros / 1000000;
+		format!("{sign}{:02}:{:02}:{:02}.{:06}", seconds / 3600, (seconds / 60) % 60, seconds % 60 , micros % 1000000)
+	}
+
 	fn get_finished_count(file: &XmlDocument) -> u32 {
 		let Some(attempts) = file.root().opt("AttemptHistory").element() else {
 			return 0;
@@ -189,12 +304,15 @@ impl LiveSplitFile {
 
 		let mut finished_attempts = 0;
 		for attempt in attempts.elements().filter(|e| e.is_named("Attempt")) {
-			if attempt.elements().any(|child| child.is_named("RealTime") || child.is_named("GameTime")) {
-				finished_attempts += 1;
-			}
+			if attempt.elements().any(|child| {
+                (child.is_named("RealTime") || child.is_named("GameTime"))
+                    && child.text().ok().and_then(Self::parse_time).is_some()
+            }) {
+                finished_attempts += 1;
+            }
 		}
 
-		return finished_attempts;
+		finished_attempts
 	}
 }
 

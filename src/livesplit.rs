@@ -339,3 +339,7 @@ pub struct Segment {
 	pub best_time: Time,
     pub best_segment: Time,
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/time.rs"]
+mod time_tests;

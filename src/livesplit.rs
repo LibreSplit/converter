@@ -11,6 +11,7 @@ pub struct LiveSplitFile {
     pub _platform: String, // unused
     pub attempt_count: u32,
 	pub finished_count: u32,
+	pub start_delay: String,
     pub segments: Vec<Segment>,
 }
 
@@ -35,8 +36,8 @@ impl LiveSplitFile {
 		// Read game icon.
 		let elm_game_icon = file.root().opt("GameIcon").element();
 		let game_icon = match elm_game_icon {
-			Some(icon) => icon.text().expect("Unknown Game Icon"),
-			None => "Unknown Game Icon",
+			Some(icon) => icon.text().expect(""),
+			None => "",
 		}
 		.to_string();
 
@@ -56,6 +57,14 @@ impl LiveSplitFile {
         };
         let attempt_count: u32 = attempt_count_str.trim().parse().unwrap_or(0);
 		let finished_count: u32 = Self::get_finished_count(&file);
+
+		// Read offset and convert to start_delay
+		let offset = file.root().opt("Offset").element()
+			.and_then(|offset| offset.text().ok())
+			.and_then(Self::parse_time)
+			.unwrap_or(0);
+
+		let start_delay = Self::format_time(-offset);
 
         // Read splits.
         let mut segments: Vec<Segment> = Vec::new();
@@ -223,6 +232,7 @@ impl LiveSplitFile {
             _platform: platform,
             attempt_count,
 			finished_count,
+			start_delay,
             segments,
         }
     }

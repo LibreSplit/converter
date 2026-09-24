@@ -8,10 +8,12 @@ use crate::ComparisonMethod;
 pub struct LibreSplitFile {
     pub name: String,
 	pub category: String,
+	#[serde(default, skip_serializing_if = "String::is_empty")]
 	pub icon: String,
     pub attempt_count: u32,
 	pub finished_count: u32,
 	pub comparison_method: u32,
+	pub start_delay: String,
     pub splits: Vec<Split>,
     pub width: u32,
     pub height: u32,
@@ -24,6 +26,7 @@ impl LibreSplitFile {
 		let icon = Self::convert_icon(&lss.game_icon).unwrap_or("".to_string());
         let attempt_count = lss.attempt_count;
 		let finished_count = lss.finished_count;
+		let start_delay = lss.start_delay;
 
         // Constructs splits vector.
         let mut splits: Vec<Split> = Vec::new();
@@ -50,6 +53,7 @@ impl LibreSplitFile {
             attempt_count,
 			finished_count,
 			comparison_method: comparison_method as u32,
+			start_delay,
             splits,
             width,
             height,
@@ -191,6 +195,7 @@ impl LibreSplitFile {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Split {
     pub title: String,
+	#[serde(default, skip_serializing_if = "String::is_empty")]
 	pub icon: String,
     pub time: Time,
     pub best_time: Time,

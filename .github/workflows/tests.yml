@@ -17,7 +17,7 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Run native smoke tests
+      - name: Run native tests
         run: cargo test --locked
 
       - name: Set up Node.js
@@ -26,7 +26,7 @@ jobs:
       - name: Install wasm-pack
         run: curl https://drager.github.io/wasm-pack/installer/init.sh -sSf | bash
 
-      - name: Run browser WASM smoke test
+      - name: Run browser WASM tests
         run: wasm-pack test --firefox --headless --features wasm --locked
 
       - name: Build JavaScript package

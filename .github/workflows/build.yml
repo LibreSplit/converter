@@ -3,7 +3,7 @@ name: Build WASM Library
 on: [push, pull_request]
 
 jobs:
-  build:
+  build-wasm:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,3 +19,15 @@ jobs:
 
       - name: Build library
         run: wasm-pack build --scope libresplit --target web --release --features wasm
+
+  build-c:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build library
+        run: cargo build --release

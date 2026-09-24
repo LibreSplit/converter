@@ -10,8 +10,11 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 wasm_bindgen_test_configure!(run_in_browser);
 
 fn fixture_icon() -> String {
-	let file = XmlReader::parse_auto(Cursor::new(include_str!("../../tests/fixtures/sa2_fallen-hero.lss"))).unwrap();
-	file.root().req("GameIcon").text().unwrap().to_owned()
+    let file = XmlReader::parse_auto(Cursor::new(include_str!(
+        "../../tests/fixtures/sa2_fallen-hero.lss"
+    )))
+    .unwrap();
+    file.root().req("GameIcon").text().unwrap().to_owned()
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
@@ -26,23 +29,23 @@ fn empty_icons_remain_empty() {
 #[cfg_attr(not(target_arch = "wasm32"), test)]
 fn embedded_fixture_icons_preserve_the_original_image_bytes() {
     let icon = fixture_icon();
-	let serialized = STANDARD.decode(&icon).unwrap();
+    let serialized = STANDARD.decode(&icon).unwrap();
 
-	let expected = &serialized[161..serialized.len() - 1];
-	assert!(expected.starts_with(b"\x89PNG\r\n\x1a\n"));
-	let wrapped = format!(" \n<![CDATA[\n{icon}\n]]> \n");
-	let spaced = icon
-		.as_bytes()
-		.chunks(73)
-		.map(|chunk| std::str::from_utf8(chunk).unwrap())
-		.collect::<Vec<_>>()
-		.join("\n\t");
+    let expected = &serialized[161..serialized.len() - 1];
+    assert!(expected.starts_with(b"\x89PNG\r\n\x1a\n"));
+    let wrapped = format!(" \n<![CDATA[\n{icon}\n]]> \n");
+    let spaced = icon
+        .as_bytes()
+        .chunks(73)
+        .map(|chunk| std::str::from_utf8(chunk).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n\t");
 
-	for source in [&icon, &wrapped, &spaced] {
-		let uri = LibreSplitFile::convert_icon(source).unwrap();
-		let encoded_image = uri.strip_prefix("data:image/png;base64,").unwrap();
-		assert_eq!(STANDARD.decode(encoded_image).unwrap(), expected);
-	}
+    for source in [&icon, &wrapped, &spaced] {
+        let uri = LibreSplitFile::convert_icon(source).unwrap();
+        let encoded_image = uri.strip_prefix("data:image/png;base64,").unwrap();
+        assert_eq!(STANDARD.decode(encoded_image).unwrap(), expected);
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
@@ -77,7 +80,11 @@ fn unix_paths_escape_filename_characters_without_changing_them() {
         ("/tmp/icon\n.png", "file:///tmp/icon%0A.png"),
         ("//tmp/icon.png", "file:////tmp/icon.png"),
     ] {
-        assert_eq!(LibreSplitFile::convert_icon(source).unwrap(), expected, "{source:?}");
+        assert_eq!(
+            LibreSplitFile::convert_icon(source).unwrap(),
+            expected,
+            "{source:?}"
+        );
     }
 }
 
@@ -98,7 +105,11 @@ fn windows_absolute_paths_keep_the_drive_or_share() {
             "file://server/share/icon.png",
         ),
     ] {
-        assert_eq!(LibreSplitFile::convert_icon(source).unwrap(), expected, "{source:?}");
+        assert_eq!(
+            LibreSplitFile::convert_icon(source).unwrap(),
+            expected,
+            "{source:?}"
+        );
     }
 }
 

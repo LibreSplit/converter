@@ -17,8 +17,8 @@ mod livesplit;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ComparisonMethod {
-	RealTime = 0,
-	GameTime = 1,
+    RealTime = 0,
+    GameTime = 1,
 }
 
 // Shared logic for both interfaces.
@@ -42,7 +42,10 @@ pub fn convert(file: String, comparison_method: ComparisonMethod) -> String {
 
 // 'converter_convert' takes a null-terminated UTF-8 string and returns an owned C string.
 #[unsafe(no_mangle)]
-pub extern "C" fn converter_convert(input: *const c_char, comparison_method: ComparisonMethod) -> *mut c_char {
+pub extern "C" fn converter_convert(
+    input: *const c_char,
+    comparison_method: ComparisonMethod,
+) -> *mut c_char {
     if input.is_null() {
         return null_mut();
     }

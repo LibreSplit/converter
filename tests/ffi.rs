@@ -2,13 +2,13 @@ use std::{
 	ffi::{CStr, CString}
 };
 
-use converter::{converter_convert, converter_free_string};
+use converter::{ComparisonMethod, converter_convert, converter_free_string};
 
 #[test]
 fn ffi_conversion_returns_a_converted_string() {
 	let input = CString::new(include_str!("fixtures/sa2_fallen-hero.lss")).expect("fixture must not contain NULL bytes");
 
-	let result_ptr = converter_convert(input.as_ptr());
+	let result_ptr = converter_convert(input.as_ptr(), ComparisonMethod::GameTime);
 	assert!(!result_ptr.is_null());
 
 	let result = unsafe {
@@ -25,7 +25,7 @@ fn ffi_conversion_returns_a_converted_string() {
 fn ffi_conversion_returns_an_error_for_invalid_string() {
 	let input = CString::new("<some invalid xml").expect("fixture must not contain NULL bytes");
 
-	let result_ptr = converter_convert(input.as_ptr());
+	let result_ptr = converter_convert(input.as_ptr(), ComparisonMethod::GameTime);
 	assert!(!result_ptr.is_null());
 
 	let result = unsafe {
@@ -40,5 +40,5 @@ fn ffi_conversion_returns_an_error_for_invalid_string() {
 
 #[test]
 fn ffi_null_input_returns_null() {
-	assert!(converter_convert(std::ptr::null()).is_null());
+	assert!(converter_convert(std::ptr::null(), ComparisonMethod::GameTime).is_null());
 }

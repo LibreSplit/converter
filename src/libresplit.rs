@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 
 use crate::livesplit::LiveSplitFile;
+use crate::ComparisonMethod;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LibreSplitFile {
@@ -10,13 +11,14 @@ pub struct LibreSplitFile {
 	pub icon: String,
     pub attempt_count: u32,
 	pub finished_count: u32,
+	pub comparison_method: u32,
     pub splits: Vec<Split>,
     pub width: u32,
     pub height: u32,
 }
 
 impl LibreSplitFile {
-    pub fn from_livesplit(lss: LiveSplitFile) -> Self {
+    pub fn from_livesplit(lss: LiveSplitFile, comparison_method: ComparisonMethod) -> Self {
         let name = lss.game_name;
 		let category = lss.category_name;
 		let icon = Self::convert_icon(&lss.game_icon).unwrap_or("".to_string());
@@ -47,6 +49,7 @@ impl LibreSplitFile {
 			icon,
             attempt_count,
 			finished_count,
+			comparison_method: comparison_method as u32,
             splits,
             width,
             height,

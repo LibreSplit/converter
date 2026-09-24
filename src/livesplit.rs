@@ -81,9 +81,11 @@ impl LiveSplitFile {
                     // Get split time.
                     let elm_split_times = elm_segment.opt("SplitTimes").element().and_then(|times| {
 						times.elements().find(|time| {
+							// split must be the PB split
 							time.is_named("SplitTime") && time.att_opt("name") == Some("Personal Best")
 						})
 					});
+
                     let split_real_time = match elm_split_times {
                         Some(elm_split_time) => {
                             let elm_real_time = elm_split_time.opt("RealTime").element();
@@ -148,6 +150,7 @@ impl LiveSplitFile {
 						game_time: best_segment_game,
 					};
 
+					// we need to go through each attempt and keep track of best times to convert rainbows.
 					let mut best = [None; 2];
 					let mut next_attempt_times = HashMap::new();
 					if let Some(history) = elm_segment.opt("SegmentHistory").element() {
@@ -228,6 +231,7 @@ impl LiveSplitFile {
 		Self::parse_time(text).map(Self::format_time).unwrap_or_else(|| "-".to_owned())
 	}
 
+	// parse time from livesplit format to libresplit's nanosecond long value for accurate conversion
 	fn parse_time(text: &str) -> Option<i128> {
 		fn number(text: &str) -> Option<i128> {
 			if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -289,6 +293,7 @@ impl LiveSplitFile {
 		Some(if negative { -total } else { total })
 	}
 
+	// format nanos to libresplit json string format
 	fn format_time(nanos: i128) -> String {
 		let micros = nanos / 1000;
 		let sign = if micros < 0 { "-" } else { "" };
@@ -297,6 +302,7 @@ impl LiveSplitFile {
 		format!("{sign}{:02}:{:02}:{:02}.{:06}", seconds / 3600, (seconds / 60) % 60, seconds % 60 , micros % 1000000)
 	}
 
+	// an attempt with a RealTime or GameTime value is a finished attempt
 	fn get_finished_count(file: &XmlDocument) -> u32 {
 		let Some(attempts) = file.root().opt("AttemptHistory").element() else {
 			return 0;

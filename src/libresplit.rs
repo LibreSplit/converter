@@ -61,6 +61,7 @@ impl LibreSplitFile {
         format!("{}", rtn)
     }
 
+	// converts an icon from livesplit format to libresplit format
 	pub fn convert_icon(source: &str) -> Result<String, String> {
 		if source.is_empty() {
 			return Ok(String::new());
@@ -82,6 +83,7 @@ impl LibreSplitFile {
 			source
 		};
 
+		// try to detect if string is a windows style file path
 		let windows_path = Utf8WindowsPath::new(source);
 		let windows_components = windows_path.components();
 		let windows_prefix = if source.starts_with('/') {
@@ -98,6 +100,7 @@ impl LibreSplitFile {
 			}
 		}
 
+		// decode .net bitmap image format
 		let encoded: Vec<u8> = icon.bytes().filter(|c| !c.is_ascii_whitespace()).collect();
 		if wrapped || encoded.starts_with(b"AAEAAAD/////") {
 			if encoded.is_empty() {
@@ -105,6 +108,8 @@ impl LibreSplitFile {
 			}
 
 			let decoded = STANDARD.decode(&encoded).map_err(|error| format!("Invalid base64 in embedded icon: {error}"))?;
+
+			// derived from https://github.com/livesplit/livesplit-core/blob/master/src/run/saver/lss_image_header.bin
 			const STREAM_HEADER: &[u8] = b"\x00\x01\x00\x00\x00\xff\xff\xff\xff\x01\x00\x00\x00\x00\x00\x00\x00";
 			if !decoded.starts_with(STREAM_HEADER) {
 				return Err("Invalid .NET stream header in embedded icon".to_owned());
@@ -127,6 +132,7 @@ impl LibreSplitFile {
 			})
 			.ok_or("Invalid .NET bitmap byte array in embedded icon")?;
 
+			// get the mimetype from infer. if this fails it could be because it's an svg
 			let mime = infer::get(image)
 				.filter(|format| format.matcher_type() == infer::MatcherType::Image)
 				.map(|format| format.mime_type())
@@ -169,6 +175,7 @@ impl LibreSplitFile {
 			return Ok(source.to_owned());
 		};
 
+		// ignore these characters during encoding for url parts
 		const PATH_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
 			.remove(b'-')
 			.remove(b'.')

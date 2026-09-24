@@ -70,6 +70,7 @@ impl LibreSplitFile {
 		use base64::{Engine as _, engine::general_purpose::STANDARD};
 		use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 		use typed_path::{Utf8WindowsPath, Utf8WindowsPrefix};
+		use xml::reader::{EventReader, XmlEvent};
 
 		let wrapped = source.trim().starts_with("<![CDATA[");
 		let icon = if wrapped {
@@ -123,8 +124,21 @@ impl LibreSplitFile {
 			})
 			.ok_or("Invalid .NET bitmap byte array in embedded icon")?;
 
-			let format = infer::get(image).filter(|format| format.matcher_type() == infer::MatcherType::Image).ok_or("Unsupported image format in embedded icon")?;
-			let mime = format.mime_type();
+			let mime = infer::get(image)
+				.filter(|format| format.matcher_type() == infer::MatcherType::Image)
+				.map(|format| format.mime_type())
+				.or_else(|| {
+					for event in EventReader::new(image) {
+						if let XmlEvent::StartElement { name, .. } = event.ok()? {
+							return (name.local_name == "svg" && name.namespace.as_deref().is_none_or(|namespace| {
+								namespace == "http://www.w3.org/2000/svg"
+							}))
+							.then_some("image/svg+xml");
+						}
+					}
+					None
+				})
+				.ok_or("Unsupported image format in embedded icon")?;
 
 			let mut uri = format!("data:{mime};base64,");
 			STANDARD.encode_string(image, &mut uri);

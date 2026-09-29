@@ -141,11 +141,12 @@ fn convert_splits(
         game_time: Some(0),
     };
     let mut seen = [false, false];
-    let mut last_recorded = [true, true];
+    let mut last_skipped = [false, false];
     let mut result = Vec::with_capacity(reached_count);
 
-    for (index, segment) in lss.segments.iter().take(reached_count).enumerate() {
-        let history = match segment.history.get(&attempt_id) {
+    for segment in lss.segments.iter().take(reached_count) {
+		let record = segment.history.get(&attempt_id);
+        let history = match record {
             Some(history) => *history,
             None => {
                 // unknown time
@@ -167,13 +168,12 @@ fn convert_splits(
                 *running_total = running_total.and_then(|total| total.checked_add(value));
                 *time_for_method_mut(&mut split_time, method) = *running_total;
 
-                // keep running total for skipped segments
-                if index == 0 || last_recorded[method_index] {
+                if !last_skipped[method_index] {
                     *time_for_method_mut(&mut segment_time, method) = Some(value);
                 }
             }
 
-            last_recorded[method_index] = value.is_some();
+            last_skipped[method_index] = record.is_some() && value.is_none();
         }
 
         result.push(AttemptSplit {

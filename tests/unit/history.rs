@@ -155,6 +155,56 @@ fn converts_legacy_livesplit_runs() {
 }
 
 #[test]
+fn preserves_recorded_segment_times_after_missing_history() {
+    for attempt_time in [
+        "<RealTime>01:48:07.9188502</RealTime><GameTime>01:33:05.6430000</GameTime>",
+        "",
+    ] {
+        let input = format!(
+            r#"
+            <Run>
+              <AttemptHistory><Attempt id="10">{attempt_time}</Attempt></AttemptHistory>
+              <Segments>
+                <Segment>
+                  <Name>Opening</Name>
+                  <SegmentHistory><Time id="10"><RealTime>00:02:04.0305300</RealTime><GameTime>00:01:56.7000000</GameTime></Time></SegmentHistory>
+                </Segment>
+                <Segment><Name>Missing</Name><SegmentHistory /></Segment>
+                <Segment>
+                  <Name>Finish</Name>
+                  <SegmentHistory><Time id="10"><RealTime>00:02:35.0439235</RealTime><GameTime>00:02:04.9400000</GameTime></Time></SegmentHistory>
+                </Segment>
+              </Segments>
+            </Run>
+            "#
+        );
+
+        let archive = convert_history_inner(&input, "Missing History").unwrap();
+        let files = stored_zip_files(&archive);
+        let history: Value =
+            serde_json::from_slice(&files["Missing History/undated.json"]).unwrap();
+
+        assert_eq!(
+            history[0]["splits"],
+            serde_json::json!([
+                {
+                    "title": "Opening",
+                    "time": {"real_time": "00:02:04.030530", "game_time": "00:01:56.700000"},
+                    "segment": {"real_time": "00:02:04.030530", "game_time": "00:01:56.700000"}
+                },
+                {"title": "Missing", "time": null, "segment": null},
+                {
+                    "title": "Finish",
+                    "time": null,
+                    "segment": {"real_time": "00:02:35.043923", "game_time": "00:02:04.940000"}
+                }
+            ]),
+            "attempt time: {attempt_time}"
+        );
+    }
+}
+
+#[test]
 fn missing_segment_history_does_not_produce_partial_times() {
     // users can delete individual history entries leaving unknown gaps
     for (attempt_time, expected_real_time, expected_game_time) in [

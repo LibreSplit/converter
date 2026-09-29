@@ -151,17 +151,17 @@ fn converts_legacy_livesplit_runs() {
 
 #[test]
 fn missing_segment_history_does_not_produce_partial_times() {
-	// users can delete individual history entries leaving unknown gaps
-	for (attempt_time, expected_real_time, expected_game_time) in [
-		(
-			"<RealTime>00:01:00</RealTime><GameTime>00:00:45</GameTime>",
-			"00:01:00.000000",
-			"00:00:45.000000",
-		),
-		("", "-", "-"),
-	] {
-		let input = format!(
-			r#"
+    // users can delete individual history entries leaving unknown gaps
+    for (attempt_time, expected_real_time, expected_game_time) in [
+        (
+            "<RealTime>00:01:00</RealTime><GameTime>00:00:45</GameTime>",
+            "00:01:00.000000",
+            "00:00:45.000000",
+        ),
+        ("", "-", "-"),
+    ] {
+        let input = format!(
+            r#"
 			<Run version="1.7.0">
 				<AttemptHistory><Attempt id="1">{attempt_time}</Attempt></AttemptHistory>
 				<Segments>
@@ -184,22 +184,22 @@ fn missing_segment_history_does_not_produce_partial_times() {
 				</Segments>
 			</Run>
 			"#
-		);
+        );
 
-		let arcive = convert_history_inner(&input).unwrap();
-		let files = stored_zip_files(&arcive);
-		let history: Value = serde_json::from_slice(&files["undated.json"]).unwrap();
-		let attempt = &history[0];
-		let splits = attempt["splits"].as_array().unwrap();
+        let arcive = convert_history_inner(&input).unwrap();
+        let files = stored_zip_files(&arcive);
+        let history: Value = serde_json::from_slice(&files["undated.json"]).unwrap();
+        let attempt = &history[0];
+        let splits = attempt["splits"].as_array().unwrap();
 
-		assert_eq!(splits.len(), 3);
-		assert_eq!(splits[0]["time"]["real_time"], "00:00:10.000000");
-		assert_eq!(splits[0]["time"]["game_time"], "00:00:08.000000");
-		assert!(splits[1]["time"].is_null());
-		assert!(splits[2]["time"].is_null());
-		assert_eq!(attempt["final_time"]["real_time"], expected_real_time);
-		assert_eq!(attempt["final_time"]["game_time"], expected_game_time);
-	}
+        assert_eq!(splits.len(), 3);
+        assert_eq!(splits[0]["time"]["real_time"], "00:00:10.000000");
+        assert_eq!(splits[0]["time"]["game_time"], "00:00:08.000000");
+        assert!(splits[1]["time"].is_null());
+        assert!(splits[2]["time"].is_null());
+        assert_eq!(attempt["final_time"]["real_time"], expected_real_time);
+        assert_eq!(attempt["final_time"]["game_time"], expected_game_time);
+    }
 }
 
 #[test]

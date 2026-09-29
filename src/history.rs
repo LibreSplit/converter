@@ -140,13 +140,13 @@ fn convert_splits(
 
     for (index, segment) in lss.segments.iter().take(reached_count).enumerate() {
         let history = match segment.history.get(&attempt_id) {
-			Some(history) => *history,
-			None => {
-				// unknown time
-				total = HistoryTime::default();
-				HistoryTime::default()
-			}
-		};
+            Some(history) => *history,
+            None => {
+                // unknown time
+                total = HistoryTime::default();
+                HistoryTime::default()
+            }
+        };
 
         let mut split_time = HistoryTime::default();
         let mut segment_time = HistoryTime::default();

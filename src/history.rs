@@ -145,7 +145,7 @@ fn convert_splits(
     let mut result = Vec::with_capacity(reached_count);
 
     for segment in lss.segments.iter().take(reached_count) {
-		let record = segment.history.get(&attempt_id);
+        let record = segment.history.get(&attempt_id);
         let history = match record {
             Some(history) => *history,
             None => {

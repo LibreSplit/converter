@@ -54,10 +54,14 @@ const LIVE_SPLIT_HISTORY: &str = r#"
 
 #[test]
 fn converts_livesplit_history_to_dated_json_files() {
-    let archive = convert_history_inner(LIVE_SPLIT_HISTORY).expect("history conversion should succeed");
+    let archive =
+        convert_history_inner(LIVE_SPLIT_HISTORY).expect("history conversion should succeed");
     let files = stored_zip_files(&archive);
 
-    assert_eq!(files.keys().map(String::as_str).collect::<Vec<_>>(), ["2026-09-23.json", "2026-09-24.json"]);
+    assert_eq!(
+        files.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["2026-09-23.json", "2026-09-24.json"]
+    );
 
     let first_date: Value = serde_json::from_slice(&files["2026-09-23.json"]).unwrap();
     let attempts = first_date.as_array().unwrap();
@@ -69,12 +73,24 @@ fn converts_livesplit_history_to_dated_json_files() {
     assert_eq!(finished["reason"], "FINISHED");
     assert_eq!(finished["final_time"]["real_time"], "00:00:30.000000");
     assert_eq!(finished["final_time"]["game_time"], "00:00:25.000000");
-    assert_eq!(finished["splits"][0]["time"]["real_time"], "00:00:10.000000");
-    assert_eq!(finished["splits"][0]["segment"]["game_time"], "00:00:08.000000");
+    assert_eq!(
+        finished["splits"][0]["time"]["real_time"],
+        "00:00:10.000000"
+    );
+    assert_eq!(
+        finished["splits"][0]["segment"]["game_time"],
+        "00:00:08.000000"
+    );
     assert!(finished["splits"][1]["time"].is_null());
     assert!(finished["splits"][1]["segment"].is_null());
-    assert_eq!(finished["splits"][2]["time"]["real_time"], "00:00:30.000000");
-    assert_eq!(finished["splits"][2]["time"]["game_time"], "00:00:25.000000");
+    assert_eq!(
+        finished["splits"][2]["time"]["real_time"],
+        "00:00:30.000000"
+    );
+    assert_eq!(
+        finished["splits"][2]["time"]["game_time"],
+        "00:00:25.000000"
+    );
     assert!(finished["splits"][2]["segment"].is_null());
 
     let reset = &attempts[1];
@@ -83,12 +99,18 @@ fn converts_livesplit_history_to_dated_json_files() {
     assert_eq!(reset["final_time"]["game_time"], "00:00:17.000000");
     assert_eq!(reset["splits"].as_array().unwrap().len(), 2);
     assert_eq!(reset["splits"][1]["time"]["real_time"], "00:00:20.000000");
-    assert_eq!(reset["splits"][1]["segment"]["real_time"], "00:00:08.000000");
+    assert_eq!(
+        reset["splits"][1]["segment"]["real_time"],
+        "00:00:08.000000"
+    );
 
     let second_date: Value = serde_json::from_slice(&files["2026-09-24.json"]).unwrap();
     let before_first_split = &second_date[0];
     assert_eq!(before_first_split["reason"], "RESET");
-    assert_eq!(before_first_split["final_time"]["real_time"], "00:00:05.000000");
+    assert_eq!(
+        before_first_split["final_time"]["real_time"],
+        "00:00:05.000000"
+    );
     assert_eq!(before_first_split["final_time"]["game_time"], "-");
     assert_eq!(before_first_split["splits"].as_array().unwrap().len(), 0);
 }
@@ -117,13 +139,20 @@ fn converts_legacy_livesplit_runs() {
     assert_eq!(history[0]["reason"], "FINISHED");
     assert_eq!(history[0]["final_time"]["real_time"], "00:00:03.500000");
     assert_eq!(history[0]["final_time"]["game_time"], "-");
-    assert_eq!(history[0]["splits"][0]["time"]["real_time"], "00:00:03.500000");
-    assert_eq!(history[0]["splits"][0]["segment"]["real_time"], "00:00:03.500000");
+    assert_eq!(
+        history[0]["splits"][0]["time"]["real_time"],
+        "00:00:03.500000"
+    );
+    assert_eq!(
+        history[0]["splits"][0]["segment"]["real_time"],
+        "00:00:03.500000"
+    );
 }
 
 #[test]
 fn an_empty_history_is_an_empty_zip() {
-    let archive = convert_history_inner("<Run><Offset>00:00:00</Offset><Segments /></Run>").unwrap();
+    let archive =
+        convert_history_inner("<Run><Offset>00:00:00</Offset><Segments /></Run>").unwrap();
     assert!(stored_zip_files(&archive).is_empty());
 }
 
@@ -137,9 +166,12 @@ fn stored_zip_files(archive: &[u8]) -> BTreeMap<String, Vec<u8>> {
     let mut files = BTreeMap::new();
 
     for index in 0..archive.len() {
-        let mut file = archive.by_index(index).expect("ZIP entry should be readable");
+        let mut file = archive
+            .by_index(index)
+            .expect("ZIP entry should be readable");
         let mut data = Vec::new();
-        file.read_to_end(&mut data).expect("ZIP entry contents should be readable");
+        file.read_to_end(&mut data)
+            .expect("ZIP entry contents should be readable");
         files.insert(file.name().to_owned(), data);
     }
 

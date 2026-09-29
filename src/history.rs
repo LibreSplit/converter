@@ -54,53 +54,74 @@ pub fn convert(lss: &LiveSplitHistory) -> Result<Vec<u8>, String> {
     make_zip(&files)
 }
 
-fn push_attempt(histories: &mut BTreeMap<String, Vec<Attempt>>, lss: &LiveSplitHistory, attempt: &LiveSplitAttempt, finished: bool) {
-	let started_utc = attempt.started.as_deref().and_then(parse_livesplit_timestamp);
-	let ended_utc = attempt.ended.as_deref().and_then(parse_livesplit_timestamp);
+fn push_attempt(
+    histories: &mut BTreeMap<String, Vec<Attempt>>,
+    lss: &LiveSplitHistory,
+    attempt: &LiveSplitAttempt,
+    finished: bool,
+) {
+    let started_utc = attempt
+        .started
+        .as_deref()
+        .and_then(parse_livesplit_timestamp);
+    let ended_utc = attempt.ended.as_deref().and_then(parse_livesplit_timestamp);
 
-	let (splits, accumulated) = convert_splits(lss, attempt.id, finished);
-	let duration_real_time = started_utc
-		.as_ref()
-		.zip(ended_utc.as_ref())
-		.and_then(|(started, ended)| {
-			let seconds = ended.signed_duration_since(started).num_seconds();
-			if seconds < 0 {
-				return None;
-			}
+    let (splits, accumulated) = convert_splits(lss, attempt.id, finished);
+    let duration_real_time =
+        started_utc
+            .as_ref()
+            .zip(ended_utc.as_ref())
+            .and_then(|(started, ended)| {
+                let seconds = ended.signed_duration_since(started).num_seconds();
+                if seconds < 0 {
+                    return None;
+                }
 
-			i128::from(seconds)
-				.checked_mul(1_000_000_000)?
-				.checked_sub(attempt.pause_time.unwrap_or(0))?
-				.checked_add(lss.offset)
-		});
+                i128::from(seconds)
+                    .checked_mul(1_000_000_000)?
+                    .checked_sub(attempt.pause_time.unwrap_or(0))?
+                    .checked_add(lss.offset)
+            });
 
-	let date = started_utc
+    let date = started_utc
         .as_ref()
         .or(ended_utc.as_ref())
         .map(|date_time| date_time.format(LIBRESPLIT_DATE_FORMAT).to_string())
         .unwrap_or_else(|| "undated".to_owned());
 
-	let derived_real_time = match (duration_real_time, accumulated.real_time) {
+    let derived_real_time = match (duration_real_time, accumulated.real_time) {
         (Some(duration), Some(split)) => Some(duration.max(split)),
         (duration, split) => duration.or(split),
     };
 
-	let final_time = HistoryTime {
+    let final_time = HistoryTime {
         real_time: attempt.time.real_time.or(derived_real_time),
         game_time: attempt.time.game_time.or(accumulated.game_time),
     };
 
-	histories.entry(date).or_default().push(Attempt {
-        start_time: started_utc.map(|date_time| date_time.format(LIBRESPLIT_TIMESTAMP_FORMAT).to_string()).unwrap_or_default(),
-        end_time: ended_utc.map(|date_time| date_time.format(LIBRESPLIT_TIMESTAMP_FORMAT).to_string()).unwrap_or_default(),
+    histories.entry(date).or_default().push(Attempt {
+        start_time: started_utc
+            .map(|date_time| date_time.format(LIBRESPLIT_TIMESTAMP_FORMAT).to_string())
+            .unwrap_or_default(),
+        end_time: ended_utc
+            .map(|date_time| date_time.format(LIBRESPLIT_TIMESTAMP_FORMAT).to_string())
+            .unwrap_or_default(),
         final_time: convert_time_format(final_time),
         reason: if finished { "FINISHED" } else { "RESET" },
         splits,
     });
 }
 
-fn convert_splits(lss: &LiveSplitHistory, attempt_id: i32, finished: bool) -> (Vec<AttemptSplit>, HistoryTime) {
-    let recorded_count = lss.segments.iter().rposition(|segment| segment.history.contains_key(&attempt_id)).map_or(0, |index| index + 1);
+fn convert_splits(
+    lss: &LiveSplitHistory,
+    attempt_id: i32,
+    finished: bool,
+) -> (Vec<AttemptSplit>, HistoryTime) {
+    let recorded_count = lss
+        .segments
+        .iter()
+        .rposition(|segment| segment.history.contains_key(&attempt_id))
+        .map_or(0, |index| index + 1);
     let reached_count = if recorded_count > 0 {
         recorded_count
     } else if finished {
@@ -118,7 +139,11 @@ fn convert_splits(lss: &LiveSplitHistory, attempt_id: i32, finished: bool) -> (V
     let mut result = Vec::with_capacity(reached_count);
 
     for (index, segment) in lss.segments.iter().take(reached_count).enumerate() {
-        let history = segment.history.get(&attempt_id).copied().unwrap_or_default();
+        let history = segment
+            .history
+            .get(&attempt_id)
+            .copied()
+            .unwrap_or_default();
         let mut split_time = HistoryTime::default();
         let mut segment_time = HistoryTime::default();
 
@@ -143,16 +168,24 @@ fn convert_splits(lss: &LiveSplitHistory, attempt_id: i32, finished: bool) -> (V
 
         result.push(AttemptSplit {
             title: segment.name.clone(),
-            time: split_time.has_time().then(|| convert_time_format(split_time)),
-            segment: segment_time.has_time().then(|| convert_time_format(segment_time)),
+            time: split_time
+                .has_time()
+                .then(|| convert_time_format(split_time)),
+            segment: segment_time
+                .has_time()
+                .then(|| convert_time_format(segment_time)),
         });
     }
 
     (
         result,
         HistoryTime {
-            real_time: seen[ComparisonMethod::RealTime as usize].then_some(total.real_time).flatten(),
-            game_time: seen[ComparisonMethod::GameTime as usize].then_some(total.game_time).flatten(),
+            real_time: seen[ComparisonMethod::RealTime as usize]
+                .then_some(total.real_time)
+                .flatten(),
+            game_time: seen[ComparisonMethod::GameTime as usize]
+                .then_some(total.game_time)
+                .flatten(),
         },
     )
 }
@@ -173,8 +206,14 @@ fn time_for_method_mut(time: &mut HistoryTime, method: ComparisonMethod) -> &mut
 
 fn convert_time_format(time: HistoryTime) -> Time {
     Time {
-        real_time: time.real_time.map(LiveSplitFile::format_time).unwrap_or_else(|| "-".to_owned()),
-        game_time: time.game_time.map(LiveSplitFile::format_time).unwrap_or_else(|| "-".to_owned()),
+        real_time: time
+            .real_time
+            .map(LiveSplitFile::format_time)
+            .unwrap_or_else(|| "-".to_owned()),
+        game_time: time
+            .game_time
+            .map(LiveSplitFile::format_time)
+            .unwrap_or_else(|| "-".to_owned()),
     }
 }
 
@@ -182,9 +221,16 @@ fn make_zip(files: &[(String, Vec<u8>)]) -> Result<Vec<u8>, String> {
     let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
     for (name, data) in files {
-        archive.start_file(name, options).map_err(|error| format!("Unable to add history file to ZIP: {error}"))?;
-        archive.write_all(data).map_err(|error| format!("Unable to write history file to ZIP: {error}"))?;
+        archive
+            .start_file(name, options)
+            .map_err(|error| format!("Unable to add history file to ZIP: {error}"))?;
+        archive
+            .write_all(data)
+            .map_err(|error| format!("Unable to write history file to ZIP: {error}"))?;
     }
 
-    archive.finish().map(Cursor::into_inner).map_err(|error| format!("Unable to finish attempt-history ZIP: {error}"))
+    archive
+        .finish()
+        .map(Cursor::into_inner)
+        .map_err(|error| format!("Unable to finish attempt-history ZIP: {error}"))
 }

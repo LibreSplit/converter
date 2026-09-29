@@ -35,4 +35,5 @@ js-sys = { version = "0.3.106", optional = true }
 web-sys = { version = "0.3.106", features = ["Blob", "BlobPropertyBag"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-futures = "0.4.79"
 wasm-bindgen-test = "0.3.79"

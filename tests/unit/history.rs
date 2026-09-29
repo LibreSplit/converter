@@ -54,16 +54,20 @@ const LIVE_SPLIT_HISTORY: &str = r#"
 
 #[test]
 fn converts_livesplit_history_to_dated_json_files() {
-    let archive =
-        convert_history_inner(LIVE_SPLIT_HISTORY).expect("history conversion should succeed");
+    let archive = convert_history_inner(LIVE_SPLIT_HISTORY, "Example Game - Any%")
+        .expect("history conversion should succeed");
     let files = stored_zip_files(&archive);
 
     assert_eq!(
         files.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["2026-09-23.json", "2026-09-24.json"]
+        [
+            "Example Game - Any%/2026-09-23.json",
+            "Example Game - Any%/2026-09-24.json"
+        ]
     );
 
-    let first_date: Value = serde_json::from_slice(&files["2026-09-23.json"]).unwrap();
+    let first_date: Value =
+        serde_json::from_slice(&files["Example Game - Any%/2026-09-23.json"]).unwrap();
     let attempts = first_date.as_array().unwrap();
     assert_eq!(attempts.len(), 2);
 
@@ -104,7 +108,8 @@ fn converts_livesplit_history_to_dated_json_files() {
         "00:00:08.000000"
     );
 
-    let second_date: Value = serde_json::from_slice(&files["2026-09-24.json"]).unwrap();
+    let second_date: Value =
+        serde_json::from_slice(&files["Example Game - Any%/2026-09-24.json"]).unwrap();
     let before_first_split = &second_date[0];
     assert_eq!(before_first_split["reason"], "RESET");
     assert_eq!(
@@ -132,9 +137,9 @@ fn converts_legacy_livesplit_runs() {
         </Run>
     "#;
 
-    let archive = convert_history_inner(input).unwrap();
+    let archive = convert_history_inner(input, "Legacy Splits").unwrap();
     let files = stored_zip_files(&archive);
-    let history: Value = serde_json::from_slice(&files["undated.json"]).unwrap();
+    let history: Value = serde_json::from_slice(&files["Legacy Splits/undated.json"]).unwrap();
 
     assert_eq!(history[0]["reason"], "FINISHED");
     assert_eq!(history[0]["final_time"]["real_time"], "00:00:03.500000");
@@ -186,9 +191,9 @@ fn missing_segment_history_does_not_produce_partial_times() {
 			"#
         );
 
-        let arcive = convert_history_inner(&input).unwrap();
-        let files = stored_zip_files(&arcive);
-        let history: Value = serde_json::from_slice(&files["undated.json"]).unwrap();
+        let archive = convert_history_inner(&input, "Edited Splits").unwrap();
+        let files = stored_zip_files(&archive);
+        let history: Value = serde_json::from_slice(&files["Edited Splits/undated.json"]).unwrap();
         let attempt = &history[0];
         let splits = attempt["splits"].as_array().unwrap();
 
@@ -205,13 +210,53 @@ fn missing_segment_history_does_not_produce_partial_times() {
 #[test]
 fn an_empty_history_is_an_empty_zip() {
     let archive =
-        convert_history_inner("<Run><Offset>00:00:00</Offset><Segments /></Run>").unwrap();
+        convert_history_inner("<Run><Offset>00:00:00</Offset><Segments /></Run>", "Empty").unwrap();
     assert!(stored_zip_files(&archive).is_empty());
 }
 
 #[test]
 fn invalid_xml_returns_an_error() {
-    assert!(convert_history_inner("<Run").is_err());
+    assert!(convert_history_inner("<Run", "Invalid").is_err());
+}
+
+#[test]
+fn history_directory_names_are_preserved() {
+    for directory_name in [
+        "sa2_fallen-hero",
+        "ゲーム - Any%",
+        "splits.lss",
+        r"splits\other",
+        "C:splits",
+        "Any%: ?*<>|\"",
+    ] {
+        let archive = convert_history_inner(LIVE_SPLIT_HISTORY, directory_name).unwrap();
+        let files = stored_zip_files(&archive);
+        assert_eq!(
+            files.keys().cloned().collect::<Vec<_>>(),
+            [
+                format!("{directory_name}/2026-09-23.json"),
+                format!("{directory_name}/2026-09-24.json"),
+            ]
+        );
+    }
+}
+
+#[test]
+fn history_directory_must_be_a_name_not_a_path() {
+    for directory_name in [
+        "",
+        ".",
+        "..",
+        "/splits",
+        "../splits",
+        "splits/other",
+        "splits\0",
+    ] {
+        assert!(
+            convert_history_inner(LIVE_SPLIT_HISTORY, directory_name).is_err(),
+            "{directory_name:?}"
+        );
+    }
 }
 
 fn stored_zip_files(archive: &[u8]) -> BTreeMap<String, Vec<u8>> {

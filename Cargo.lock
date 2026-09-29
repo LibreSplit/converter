@@ -87,6 +87,7 @@ dependencies = [
  "spex",
  "typed-path",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
  "xml",

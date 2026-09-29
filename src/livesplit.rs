@@ -213,24 +213,27 @@ impl LiveSplitFile {
                                 continue;
                             };
 
-                            let history_time = Self::parse_history_time(record);
                             let mut total = if segment_idx == 0 {
                                 [Some(0); 2]
                             } else {
                                 attempt_times.remove(&id).unwrap_or([None; 2])
                             };
 
-                            for (method_idx, time) in
-                                [history_time.real_time, history_time.game_time]
-                                    .into_iter()
-                                    .enumerate()
+                            for (method_idx, method) in ["RealTime", "GameTime"].iter().enumerate()
                             {
-                                let Some(time) = time else {
+                                let Some(time) = record.opt(*method).element() else {
                                     continue;
                                 };
 
+                                let text = time.text().unwrap_or("-").trim();
+                                if text.is_empty() {
+                                    continue;
+                                }
+
                                 total[method_idx] = total[method_idx]
-                                    .and_then(|elapsed| elapsed.checked_add(time))
+                                    .and_then(|elapsed| {
+                                        elapsed.checked_add(Self::parse_time(text)?)
+                                    })
                                     .filter(|time| time.unsigned_abs() / 1000 < i64::MAX as u128);
                                 best[method_idx] =
                                     best[method_idx].into_iter().chain(total[method_idx]).min();

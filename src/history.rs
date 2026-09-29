@@ -5,6 +5,7 @@ use std::{
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::Serialize;
+use typed_path::Utf8UnixPath;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 use crate::ComparisonMethod;
@@ -37,7 +38,12 @@ fn parse_livesplit_timestamp(text: &str) -> Option<DateTime<Utc>> {
         .map(|date_time| date_time.and_utc())
 }
 
-pub fn convert(lss: &LiveSplitHistory) -> Result<Vec<u8>, String> {
+pub fn convert(lss: &LiveSplitHistory, dir_name: &str) -> Result<Vec<u8>, String> {
+    let dir = Utf8UnixPath::new(dir_name);
+    if dir.file_name() != Some(dir_name) || !dir.is_valid() {
+        return Err("Invalid directory name".to_owned());
+    }
+
     let mut histories: BTreeMap<String, Vec<Attempt>> = BTreeMap::new();
 
     for attempt in &lss.attempts {
@@ -48,7 +54,7 @@ pub fn convert(lss: &LiveSplitHistory) -> Result<Vec<u8>, String> {
     for (date, attempts) in histories {
         let data = serde_json::to_vec_pretty(&attempts)
             .map_err(|error| format!("Unable to serialize attempt history: {error}"))?;
-        files.push((format!("{date}.json"), data));
+        files.push((format!("{dir_name}/{date}.json"), data));
     }
 
     make_zip(&files)

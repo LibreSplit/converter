@@ -71,9 +71,11 @@ fn ffi_history_conversion_returns_a_zip_buffer() {
         "#,
     )
     .unwrap();
-    let mut len = 0;
 
-    let result_ptr = converter_convert_history(input.as_ptr(), &mut len);
+    let mut len = 0;
+    let dir_name = CString::new(r"Example Game: Any%\practice").unwrap();
+
+    let result_ptr = converter_convert_history(input.as_ptr(), dir_name.as_ptr(), &mut len);
     assert!(!result_ptr.is_null());
     assert!(len > 0);
 
@@ -81,7 +83,10 @@ fn ffi_history_conversion_returns_a_zip_buffer() {
         let result = unsafe { std::slice::from_raw_parts(result_ptr, len) };
         let mut archive = ZipArchive::new(Cursor::new(result)).expect("output should be a ZIP");
         assert_eq!(archive.len(), 1);
-        assert_eq!(archive.by_index(0).unwrap().name(), "2026-09-23.json");
+        assert_eq!(
+            archive.by_index(0).unwrap().name(),
+            r"Example Game: Any%\practice/2026-09-23.json"
+        );
     }
 
     converter_free_bytes(result_ptr, len);
@@ -90,9 +95,10 @@ fn ffi_history_conversion_returns_a_zip_buffer() {
 #[test]
 fn ffi_history_conversion_returns_null_for_invalid_input() {
     let input = CString::new("<Run").unwrap();
+    let dir_name = CString::new("Splits").unwrap();
     let mut len = usize::MAX;
 
-    let result_ptr = converter_convert_history(input.as_ptr(), &mut len);
+    let result_ptr = converter_convert_history(input.as_ptr(), dir_name.as_ptr(), &mut len);
 
     assert!(result_ptr.is_null());
     assert_eq!(len, 0);
@@ -101,11 +107,31 @@ fn ffi_history_conversion_returns_null_for_invalid_input() {
 #[test]
 fn ffi_history_conversion_rejects_null_pointers() {
     let input = CString::new("<Run />").unwrap();
+    let dir_name = CString::new("Splits").unwrap();
     let mut len = usize::MAX;
 
-    assert!(converter_convert_history(std::ptr::null(), &mut len).is_null());
+    assert!(converter_convert_history(std::ptr::null(), dir_name.as_ptr(), &mut len).is_null());
     assert_eq!(len, 0);
-    assert!(converter_convert_history(input.as_ptr(), std::ptr::null_mut()).is_null());
+
+    len = usize::MAX;
+    assert!(converter_convert_history(input.as_ptr(), std::ptr::null(), &mut len).is_null());
+    assert_eq!(len, 0);
+
+    assert!(
+        converter_convert_history(input.as_ptr(), dir_name.as_ptr(), std::ptr::null_mut())
+            .is_null()
+    );
 
     converter_free_bytes(std::ptr::null_mut(), 0);
+}
+
+#[test]
+fn ffi_history_conversion_rejects_invalid_dir_names() {
+    let input = CString::new("<Run />").unwrap();
+    for dir_name in [c"", c"../splits", c"\xff"] {
+        let mut len = usize::MAX;
+        let result = converter_convert_history(input.as_ptr(), dir_name.as_ptr(), &mut len);
+        assert!(result.is_null());
+        assert_eq!(len, 0);
+    }
 }

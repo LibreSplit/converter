@@ -28,11 +28,11 @@ pub enum ComparisonMethod {
     GameTime = 1,
 }
 
-fn convert_history_inner(file: &str) -> Result<Vec<u8>, String> {
+fn convert_history_inner(file: &str, dir_name: &str) -> Result<Vec<u8>, String> {
     let cursor = Cursor::new(file);
     let xml = XmlReader::parse_auto(cursor).map_err(|e| e.to_string())?;
     let livesplit_data = livesplit::LiveSplitHistory::new(xml);
-    history::convert(&livesplit_data)
+    history::convert(&livesplit_data, dir_name)
 }
 
 // Shared logic for both interfaces.
@@ -49,8 +49,9 @@ fn convert_inner(file: &str, comparison_method: ComparisonMethod) -> Result<Stri
 
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 #[wasm_bindgen]
-pub fn convert_history(file: String) -> Result<Blob, JsValue> {
-    let bytes = convert_history_inner(&file).map_err(|error| JsValue::from_str(&error))?;
+pub fn convert_history(file: String, dir_name: String) -> Result<Blob, JsValue> {
+    let bytes =
+        convert_history_inner(&file, &dir_name).map_err(|error| JsValue::from_str(&error))?;
     let parts = Array::new();
     parts.push(&Uint8Array::from(bytes.as_slice()));
     let options = BlobPropertyBag::new();
@@ -74,6 +75,7 @@ pub fn convert(file: String, comparison_method: ComparisonMethod) -> String {
 #[unsafe(no_mangle)]
 pub extern "C" fn converter_convert_history(
     input: *const c_char,
+    dir_name: *const c_char,
     output_len: *mut usize,
 ) -> *mut u8 {
     if output_len.is_null() {
@@ -84,7 +86,7 @@ pub extern "C" fn converter_convert_history(
         *output_len = 0;
     }
 
-    if input.is_null() {
+    if input.is_null() || dir_name.is_null() {
         return null_mut();
     }
 
@@ -95,7 +97,14 @@ pub extern "C" fn converter_convert_history(
         }
     };
 
-    let Ok(output) = convert_history_inner(input) else {
+    let dir_name = unsafe {
+        match CStr::from_ptr(dir_name).to_str() {
+            Ok(dir_name) => dir_name,
+            Err(_) => return null_mut(),
+        }
+    };
+
+    let Ok(output) = convert_history_inner(input, dir_name) else {
         return null_mut();
     };
 

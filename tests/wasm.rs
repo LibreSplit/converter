@@ -40,7 +40,7 @@ async fn wasm_history_returns_zip_blob() {
     let mut archive = ZipArchive::new(Cursor::new(bytes)).expect("Blob should contain a ZIP");
     assert_eq!(archive.len(), 1);
     let mut file = archive.by_index(0).unwrap();
-    assert_eq!(file.name(), r"Example Game: Any%\practice/2026-09-23.json");
+    assert_eq!(file.name(), r"Example Game: Any%\practice/2025-01-01.json");
     let mut json = String::new();
     file.read_to_string(&mut json).unwrap();
     let attempts: serde_json::Value = serde_json::from_str(&json).unwrap();

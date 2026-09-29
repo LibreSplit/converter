@@ -69,6 +69,57 @@ pub fn convert(file: String, comparison_method: ComparisonMethod) -> String {
 
 // C FFI entrypoints used by the split editor.
 
+// 'converter_convert_history' takes a null-terminated UTF-8 string and returns an owned ZIP byte buffer or null on error.
+// the zip byte length is stored in 'output_len' on success
+#[unsafe(no_mangle)]
+pub extern "C" fn converter_convert_history(
+    input: *const c_char,
+    output_len: *mut usize,
+) -> *mut u8 {
+    if output_len.is_null() {
+        return null_mut();
+    };
+
+    unsafe {
+        *output_len = 0;
+    }
+
+    if input.is_null() {
+        return null_mut();
+    }
+
+    let input = unsafe {
+        match CStr::from_ptr(input).to_str() {
+            Ok(input) => input,
+            Err(_) => return null_mut(),
+        }
+    };
+
+    let Ok(output) = convert_history_inner(input) else {
+        return null_mut();
+    };
+
+    let output = output.into_boxed_slice();
+    let len = output.len();
+    let data = Box::into_raw(output) as *mut u8;
+    unsafe {
+        *output_len = len;
+    }
+
+    data
+}
+
+// The caller must free the returned pointer with 'converter_free_bytes'.
+#[unsafe(no_mangle)]
+pub extern "C" fn converter_free_bytes(ptr: *mut u8, len: usize) {
+    if !ptr.is_null() {
+        unsafe {
+            let slice = std::ptr::slice_from_raw_parts_mut(ptr, len);
+            drop(Box::from_raw(slice));
+        }
+    }
+}
+
 // 'converter_convert' takes a null-terminated UTF-8 string and returns an owned C string.
 #[unsafe(no_mangle)]
 pub extern "C" fn converter_convert(

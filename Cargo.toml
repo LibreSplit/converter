@@ -13,8 +13,9 @@ edition = "2024"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-wasm-bindgen = { version = "0.2.128", optional = true }
+wasm-bindgen = { version = "0.2.129", optional = true }
 base64 = "0.23.1"
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 infer = "0.22.0"
 percent-encoding = "2.3.2"
 typed-path = "0.12.3"
@@ -23,10 +24,15 @@ xml = "1.4.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 spex = "0.2.2"
+zip = { version = "8.6.0", default-features = false }
 
 [features]
 default = []
-wasm = ["dep:wasm-bindgen"]
+wasm = ["dep:js-sys", "dep:wasm-bindgen", "dep:web-sys"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { version = "0.3.106", optional = true }
+web-sys = { version = "0.3.106", features = ["Blob", "BlobPropertyBag"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-wasm-bindgen-test = "0.3.78"
+wasm-bindgen-test = "0.3.79"

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use spex::xml::XmlDocument;
+use spex::xml::{Element, XmlDocument};
 
 use crate::libresplit::Time;
 
@@ -13,6 +13,38 @@ pub struct LiveSplitFile {
     pub finished_count: u32,
     pub start_delay: String,
     pub segments: Vec<Segment>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HistoryTime {
+	pub real_time: Option<i128>,
+	pub game_time: Option<i128>,
+}
+
+impl HistoryTime {
+	pub fn has_time(self) -> bool {
+		self.real_time.is_some() || self.game_time.is_some()
+	}
+}
+
+#[derive(Debug)]
+pub struct Attempt {
+	pub id: i32,
+	pub time: HistoryTime,
+	pub started: Option<String>,
+	pub ended: Option<String>,
+	pub pause_time: Option<i128>,
+}
+
+pub struct LiveSplitHistory {
+	pub offset: i128,
+	pub attempts: Vec<Attempt>,
+	pub segments: Vec<HistorySegment>,
+}
+
+pub struct HistorySegment {
+	pub name: String,
+	pub history: HashMap<i32, HistoryTime>,
 }
 
 impl LiveSplitFile {
@@ -181,26 +213,22 @@ impl LiveSplitFile {
                                 continue;
                             };
 
+							let history_time = Self::parse_history_time(record);
                             let mut total = if segment_idx == 0 {
                                 [Some(0); 2]
                             } else {
                                 attempt_times.remove(&id).unwrap_or([None; 2])
                             };
 
-                            for (method_idx, method) in ["RealTime", "GameTime"].iter().enumerate()
+                            for (method_idx, time) in [history_time.real_time, history_time.game_time].into_iter().enumerate()
                             {
-                                let Some(time) = record.opt(*method).element() else {
+                                let Some(time) = time else {
                                     continue;
                                 };
 
-                                let text = time.text().unwrap_or("-").trim();
-                                if text.is_empty() {
-                                    continue;
-                                }
-
                                 total[method_idx] = total[method_idx]
                                     .and_then(|elapsed| {
-                                        elapsed.checked_add(Self::parse_time(text)?)
+                                        elapsed.checked_add(time)
                                     })
                                     .filter(|time| time.unsigned_abs() / 1000 < i64::MAX as u128);
                                 best[method_idx] =
@@ -271,7 +299,7 @@ impl LiveSplitFile {
     }
 
     // parse time from livesplit format to libresplit's nanosecond long value for accurate conversion
-    fn parse_time(text: &str) -> Option<i128> {
+    pub(crate) fn parse_time(text: &str) -> Option<i128> {
         fn number(text: &str) -> Option<i128> {
             if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
                 return None;
@@ -335,7 +363,7 @@ impl LiveSplitFile {
     }
 
     // format nanos to libresplit json string format
-    fn format_time(nanos: i128) -> String {
+    pub(crate) fn format_time(nanos: i128) -> String {
         let micros = nanos / 1_000;
         let sign = if micros < 0 { "-" } else { "" };
         let micros = micros.unsigned_abs();
@@ -366,6 +394,80 @@ impl LiveSplitFile {
 
         finished_attempts
     }
+
+	fn parse_history_time(element: &Element) -> HistoryTime {
+		let real_time = element.opt("RealTime").element().and_then(|time| time.text().ok()).and_then(Self::parse_time);
+		let game_time = element.opt("GameTime").element().and_then(|time| time.text().ok()).and_then(Self::parse_time);
+
+		if real_time.is_none() && game_time.is_none() {
+			// Really old lss files only had single times representing real time
+			return HistoryTime { real_time: element.text().ok().and_then(Self::parse_time), game_time: None };
+		}
+
+		HistoryTime { real_time, game_time }
+	}
+}
+
+impl LiveSplitHistory {
+	pub fn new(file: XmlDocument) -> Self {
+		let offset = file.root().opt("Offset").element().and_then(|offset| offset.text().ok()).and_then(LiveSplitFile::parse_time).unwrap_or(0);
+		let attempts = Self::get_attempts(&file);
+		let mut segments = Vec::new();
+
+		if let Some(source_segments) = file.root().opt("Segments").element() {
+			for source_segment in source_segments.elements().filter(|element| element.is_named("Segment")) {
+				let name = source_segment.opt("Name").element().and_then(|name| name.text().ok()).unwrap_or("Unknown Split").to_owned();
+				let mut history = HashMap::new();
+
+				if let Some(source_history) = source_segment.opt("SegmentHistory").element() {
+					for record in source_history.elements().filter(|element| element.is_named("Time")) {
+						let Some(id) = record.att_opt("id").and_then(|id| id.trim().parse::<i32>().ok()) else {
+							continue;
+						};
+
+						history.insert(id, LiveSplitFile::parse_history_time(record));
+					}
+				}
+
+				segments.push(HistorySegment { name, history });
+			}
+		}
+
+		Self {
+			offset,
+			attempts,
+			segments,
+		}
+	}
+
+	fn get_attempts(file: &XmlDocument) -> Vec<Attempt> {
+		fn text_attribute(element: &Element, name: &str) -> Option<String> {
+			element.att_opt(name).map(str::trim).filter(|text| !text.is_empty()).map(str::to_owned)
+		}
+
+		fn parse_container(container: &Element) -> Vec<Attempt> {
+			container.elements().filter_map(|attempt| {
+				let id = attempt.att_opt("id")?.trim().parse().ok()?;
+				let time = LiveSplitFile::parse_history_time(attempt);
+				let pause_time = attempt.opt("PauseTime").element().and_then(|time| time.text().ok()).and_then(LiveSplitFile::parse_time);
+
+				Some(Attempt {
+					id,
+					time,
+					started: text_attribute(attempt, "started"),
+					ended: text_attribute(attempt, "ended"),
+					pause_time,
+				})
+			}).collect()
+		}
+
+		// Check for legacy RunHistory element
+		if let Some(history) = file.root().opt("RunHistory").element() {
+			return parse_container(history);
+		}
+
+		file.root().opt("AttemptHistory").element().map(parse_container).unwrap_or_default()
+	}
 }
 
 pub struct Segment {

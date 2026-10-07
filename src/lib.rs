@@ -10,6 +10,13 @@ use spex::parsing::XmlReader;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+use js_sys::{Array, Uint8Array};
+
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+use web_sys::{Blob, BlobPropertyBag};
+
+mod history;
 mod libresplit;
 mod livesplit;
 
@@ -19,6 +26,13 @@ mod livesplit;
 pub enum ComparisonMethod {
     RealTime = 0,
     GameTime = 1,
+}
+
+fn convert_history_inner(file: &str, dir_name: &str) -> Result<Vec<u8>, String> {
+    let cursor = Cursor::new(file);
+    let xml = XmlReader::parse_auto(cursor).map_err(|e| e.to_string())?;
+    let livesplit_data = livesplit::LiveSplitHistory::new(xml);
+    history::convert(&livesplit_data, dir_name)
 }
 
 // Shared logic for both interfaces.
@@ -33,12 +47,87 @@ fn convert_inner(file: &str, comparison_method: ComparisonMethod) -> Result<Stri
 // Used on the LibreSplit website, for converting splits.
 // Accepts a LiveSplit XML file as a string and returns LibreSplit JSON.
 
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+#[wasm_bindgen]
+pub fn convert_history(file: String, dir_name: String) -> Result<Blob, JsValue> {
+    let bytes =
+        convert_history_inner(&file, &dir_name).map_err(|error| JsValue::from_str(&error))?;
+    let parts = Array::new();
+    parts.push(&Uint8Array::from(bytes.as_slice()));
+    let options = BlobPropertyBag::new();
+    options.set_type("application/zip");
+    Blob::new_with_u8_array_sequence_and_options(&parts, &options)
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "../tests/unit/history.rs"]
+mod history_tests;
+
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub fn convert(file: String, comparison_method: ComparisonMethod) -> String {
     convert_inner(&file, comparison_method).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
 }
 
 // C FFI entrypoints used by the split editor.
+
+// 'converter_convert_history' takes a null-terminated UTF-8 string and returns an owned ZIP byte buffer or null on error.
+// the zip byte length is stored in 'output_len' on success
+#[unsafe(no_mangle)]
+pub extern "C" fn converter_convert_history(
+    input: *const c_char,
+    dir_name: *const c_char,
+    output_len: *mut usize,
+) -> *mut u8 {
+    if output_len.is_null() {
+        return null_mut();
+    };
+
+    unsafe {
+        *output_len = 0;
+    }
+
+    if input.is_null() || dir_name.is_null() {
+        return null_mut();
+    }
+
+    let input = unsafe {
+        match CStr::from_ptr(input).to_str() {
+            Ok(input) => input,
+            Err(_) => return null_mut(),
+        }
+    };
+
+    let dir_name = unsafe {
+        match CStr::from_ptr(dir_name).to_str() {
+            Ok(dir_name) => dir_name,
+            Err(_) => return null_mut(),
+        }
+    };
+
+    let Ok(output) = convert_history_inner(input, dir_name) else {
+        return null_mut();
+    };
+
+    let output = output.into_boxed_slice();
+    let len = output.len();
+    let data = Box::into_raw(output) as *mut u8;
+    unsafe {
+        *output_len = len;
+    }
+
+    data
+}
+
+// The caller must free the returned pointer with 'converter_free_bytes'.
+#[unsafe(no_mangle)]
+pub extern "C" fn converter_free_bytes(ptr: *mut u8, len: usize) {
+    if !ptr.is_null() {
+        unsafe {
+            let slice = std::ptr::slice_from_raw_parts_mut(ptr, len);
+            drop(Box::from_raw(slice));
+        }
+    }
+}
 
 // 'converter_convert' takes a null-terminated UTF-8 string and returns an owned C string.
 #[unsafe(no_mangle)]

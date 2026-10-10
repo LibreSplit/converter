@@ -23,6 +23,7 @@ struct Attempt {
 
 #[derive(Serialize)]
 struct AttemptSplit {
+    id: u32,
     title: String,
     time: Option<Time>,
     segment: Option<Time>,
@@ -144,7 +145,7 @@ fn convert_splits(
     let mut last_skipped = [false, false];
     let mut result = Vec::with_capacity(reached_count);
 
-    for segment in lss.segments.iter().take(reached_count) {
+    for (id, segment) in (1..).zip(lss.segments.iter()).take(reached_count) {
         let record = segment.history.get(&attempt_id);
         let history = match record {
             Some(history) => *history,
@@ -177,6 +178,7 @@ fn convert_splits(
         }
 
         result.push(AttemptSplit {
+            id,
             title: segment.name.clone(),
             time: split_time
                 .has_time()

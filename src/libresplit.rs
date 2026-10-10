@@ -35,8 +35,9 @@ impl LibreSplitFile {
 
         // Constructs splits vector.
         let mut splits: Vec<Split> = Vec::new();
-        for lss_split in lss.segments {
+        for (id, lss_split) in (1..).zip(lss.segments) {
             let split = Split {
+                id,
                 title: lss_split.name,
                 icon: Self::convert_icon(lss_split.icon.as_str()).unwrap_or("".to_string()),
                 time: lss_split.split_time,
@@ -218,6 +219,7 @@ impl LibreSplitFile {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Split {
+    pub id: u32,
     pub title: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub icon: String,

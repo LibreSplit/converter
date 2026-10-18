@@ -7,6 +7,13 @@ fn converts_a_valid_livesplit_file() {
 
     assert!(!output.contains("\"error\""));
     assert!(!output.is_empty());
+
+    let game: serde_json::Value = serde_json::from_str(&output).unwrap();
+    let splits = game["splits"].as_array().unwrap();
+    assert!(!splits.is_empty());
+    for (index, split) in splits.iter().enumerate() {
+        assert_eq!(split["id"], index + 1);
+    }
 }
 
 #[test]

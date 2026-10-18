@@ -8,7 +8,7 @@ use std::{
 use serde_json::Value;
 use zip::ZipArchive;
 
-use super::convert_history_inner;
+use super::{ComparisonMethod, convert_history_inner, convert_inner};
 
 const LIVE_SPLIT_HISTORY: &str = r#"
 <Run version="1.7.0">
@@ -121,6 +121,88 @@ fn converts_livesplit_history_to_dated_json_files() {
 }
 
 #[test]
+fn attempt_split_ids_match_game_splits_in_every_history_file() {
+    let input = r#"
+        <Run>
+          <AttemptHistory>
+            <Attempt id="10" started="09/23/2026 10:00:00"><RealTime>00:00:30</RealTime></Attempt>
+            <Attempt id="42" started="09/24/2026 10:00:00" />
+            <Attempt id="97"><GameTime>00:00:25</GameTime></Attempt>
+            <Attempt id="100" />
+          </AttemptHistory>
+          <Segments>
+            <Segment>
+              <Name>Checkpoint</Name>
+              <SegmentHistory>
+                <Time id="10"><RealTime>00:00:10</RealTime></Time>
+                <Time id="42"><RealTime>00:00:12</RealTime></Time>
+              </SegmentHistory>
+            </Segment>
+            <Extension />
+            <Segment>
+              <Name>Checkpoint</Name>
+              <SegmentHistory>
+                <Time id="10" />
+                <Time id="42"><RealTime>00:00:08</RealTime></Time>
+              </SegmentHistory>
+            </Segment>
+            <Segment />
+            <Segment>
+              <Name>Finish</Name>
+              <SegmentHistory>
+                <Time id="10"><RealTime>00:00:20</RealTime></Time>
+              </SegmentHistory>
+            </Segment>
+          </Segments>
+        </Run>
+    "#;
+
+    let archive = convert_history_inner(input, "Split IDs").unwrap();
+    let files = stored_zip_files(&archive);
+    // A finish with skipped/missing times, a reset, a summary-only finish,
+    // and a reset before the first split all use the original game IDs.
+    let expected_files = [
+        ("Split IDs/2026-09-23.json", vec![vec![1, 2, 3, 4]]),
+        ("Split IDs/2026-09-24.json", vec![vec![1, 2]]),
+        ("Split IDs/undated.json", vec![vec![1, 2, 3, 4], vec![]]),
+    ];
+    assert_eq!(files.len(), expected_files.len());
+
+    for method in [ComparisonMethod::RealTime, ComparisonMethod::GameTime] {
+        let game: Value = serde_json::from_str(&convert_inner(input, method).unwrap()).unwrap();
+        let game_splits = game["splits"].as_array().unwrap();
+        assert_eq!(game_splits.len(), 4);
+
+        for (filename, expected_ids) in &expected_files {
+            let history: Value = serde_json::from_slice(&files[*filename]).unwrap();
+            let attempts = history.as_array().unwrap();
+            assert_eq!(attempts.len(), expected_ids.len(), "{filename}");
+
+            for (attempt, expected) in attempts.iter().zip(expected_ids) {
+                let splits = attempt["splits"].as_array().unwrap();
+                let ids: Vec<_> = splits
+                    .iter()
+                    .map(|split| split["id"].as_u64().unwrap())
+                    .collect();
+                assert_eq!(&ids, expected, "{filename}");
+
+                assert!(splits.len() <= game_splits.len());
+                for (index, split) in splits.iter().enumerate() {
+                    assert_eq!(
+                        split["id"], game_splits[index]["id"],
+                        "{filename}: split {index}"
+                    );
+                    assert_eq!(
+                        split["title"], game_splits[index]["title"],
+                        "{filename}: split {index}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn converts_legacy_livesplit_runs() {
     let input = r#"
         <Run version="1.4.0">
@@ -142,6 +224,7 @@ fn converts_legacy_livesplit_runs() {
     let history: Value = serde_json::from_slice(&files["Legacy Splits/undated.json"]).unwrap();
 
     assert_eq!(history[0]["reason"], "FINISHED");
+    assert_eq!(history[0]["splits"][0]["id"], 1);
     assert_eq!(history[0]["final_time"]["real_time"], "00:00:03.500000");
     assert_eq!(history[0]["final_time"]["game_time"], "-");
     assert_eq!(
@@ -188,12 +271,14 @@ fn preserves_recorded_segment_times_after_missing_history() {
             history[0]["splits"],
             serde_json::json!([
                 {
+                    "id": 1,
                     "title": "Opening",
                     "time": {"real_time": "00:02:04.030530", "game_time": "00:01:56.700000"},
                     "segment": {"real_time": "00:02:04.030530", "game_time": "00:01:56.700000"}
                 },
-                {"title": "Missing", "time": null, "segment": null},
+                {"id": 2, "title": "Missing", "time": null, "segment": null},
                 {
+                    "id": 3,
                     "title": "Finish",
                     "time": null,
                     "segment": {"real_time": "00:02:35.043923", "game_time": "00:02:04.940000"}
